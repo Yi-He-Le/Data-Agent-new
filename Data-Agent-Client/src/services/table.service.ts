@@ -2,6 +2,7 @@ import http from '../lib/http';
 import { ApiPaths } from '../constants/apiPaths';
 import { sqlExecutionService } from './sqlExecution.service';
 import type { ExecuteSqlResponse } from '../types/sql';
+import type { SqlStatementType } from '../utils/sqlGenerator';
 
 export interface CreateTableParams {
   connectionId: number;
@@ -59,6 +60,8 @@ export interface ErDiagram {
   tables: ErTable[];
   relations: ErRelation[];
   truncated: boolean;
+  /** Tables in this schema. The picker appears when this is above the default cap. */
+  tableCount?: number;
   /** Other schemas contributed more tables than the diagram keeps. */
   externalTruncated?: boolean;
 }
@@ -69,6 +72,28 @@ export const tableService = {
     if (catalog) params.catalog = catalog;
     if (schema) params.schema = schema;
     const response = await http.get<ErDiagram>(ApiPaths.TABLES_ER_DIAGRAM, { params, timeout: 60000 });
+    return response.data;
+  },
+
+  /** Reloads one diagram for the checked tables. `all` omits the name list. */
+  loadErDiagram: async (
+    connectionId: number,
+    options: { catalog?: string | null; schema?: string | null; all?: boolean; tables?: string[] },
+  ): Promise<ErDiagram> => {
+    const body: {
+      connectionId: number;
+      catalog?: string;
+      schema?: string;
+      all: boolean;
+      tables?: string[];
+    } = {
+      connectionId,
+      all: options.all === true,
+    };
+    if (options.catalog) body.catalog = options.catalog;
+    if (options.schema) body.schema = options.schema;
+    if (!body.all && options.tables) body.tables = options.tables;
+    const response = await http.post<ErDiagram>(ApiPaths.TABLES_ER_DIAGRAM, body, { timeout: 180000 });
     return response.data;
   },
 
@@ -124,6 +149,22 @@ export const tableService = {
     if (schema != null && schema !== '') params.schema = schema;
 
     const response = await http.get<string>(ApiPaths.TABLES_DDL, { params });
+    return response.data;
+  },
+
+  /** Builds a SELECT/INSERT/UPDATE/DELETE template from the table's column metadata. */
+  generateSqlTemplate: async (
+    connectionId: string,
+    tableName: string,
+    statementType: SqlStatementType,
+    catalog?: string,
+    schema?: string
+  ): Promise<string> => {
+    const params: Record<string, string> = { connectionId, tableName, statementType };
+    if (catalog != null && catalog !== '') params.catalog = catalog;
+    if (schema != null && schema !== '') params.schema = schema;
+
+    const response = await http.get<string>(ApiPaths.TABLES_SQL_TEMPLATE, { params });
     return response.data;
   },
 

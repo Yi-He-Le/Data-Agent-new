@@ -5,6 +5,7 @@ import edu.zsc.ai.domain.model.context.DbContext;
 import edu.zsc.ai.domain.model.dto.request.db.BatchTableRowsRequest;
 import edu.zsc.ai.domain.model.dto.request.db.DeleteTableRowRequest;
 import edu.zsc.ai.domain.model.dto.request.db.DeleteTableRequest;
+import edu.zsc.ai.domain.model.dto.request.db.ErDiagramRequest;
 import edu.zsc.ai.domain.model.dto.request.db.InsertTableRowRequest;
 import edu.zsc.ai.domain.model.dto.request.db.RenameTableRequest;
 import edu.zsc.ai.domain.model.dto.request.db.TableRowValueRequest;
@@ -17,6 +18,7 @@ import edu.zsc.ai.domain.model.dto.response.db.ExecuteSqlResponse;
 import edu.zsc.ai.domain.model.dto.response.db.ImportTableDataResponse;
 import edu.zsc.ai.domain.model.dto.response.db.TableDataResponse;
 import edu.zsc.ai.domain.service.db.ErDiagramService;
+import edu.zsc.ai.domain.service.db.SqlTemplateService;
 import edu.zsc.ai.domain.service.db.TableService;
 import edu.zsc.ai.domain.service.db.transfer.TableDataExporter;
 import edu.zsc.ai.plugin.model.db.TableRowValue;
@@ -53,6 +55,7 @@ public class TableController {
 
     private final TableService tableService;
     private final ErDiagramService erDiagramService;
+    private final SqlTemplateService sqlTemplateService;
 
     @GetMapping("/er-diagram")
     public ApiResponse<ErDiagramResponse> erDiagram(
@@ -61,6 +64,15 @@ public class TableController {
             @RequestParam(required = false) String schema) {
         log.info("Loading ER diagram: connectionId={}, catalog={}, schema={}", connectionId, catalog, schema);
         return ApiResponse.success(erDiagramService.load(new DbContext(connectionId, catalog, schema)));
+    }
+
+    @PostMapping("/er-diagram")
+    public ApiResponse<ErDiagramResponse> erDiagram(@Valid @RequestBody ErDiagramRequest request) {
+        int requested = request.getTables() == null ? 0 : request.getTables().size();
+        log.info("Loading selected ER diagram: connectionId={}, catalog={}, schema={}, all={}, requested={}",
+                request.getConnectionId(), request.getCatalog(), request.getSchema(), request.isAll(), requested);
+        DbContext db = new DbContext(request.getConnectionId(), request.getCatalog(), request.getSchema());
+        return ApiResponse.success(erDiagramService.load(db, request.isAll(), request.getTables()));
     }
 
     @GetMapping
@@ -104,6 +116,19 @@ public class TableController {
         DbContext db = new DbContext(connectionId, catalog, schema);
         String ddl = tableService.getTableDdl(db, tableName);
         return ApiResponse.success(ddl);
+    }
+
+    @GetMapping("/sql-template")
+    public ApiResponse<String> generateSqlTemplate(
+            @RequestParam @NotNull(message = "connectionId is required") Long connectionId,
+            @RequestParam @NotNull(message = "tableName is required") String tableName,
+            @RequestParam @NotNull(message = "statementType is required") String statementType,
+            @RequestParam(required = false) String catalog,
+            @RequestParam(required = false) String schema) {
+        log.info("Generating SQL template: connectionId={}, tableName={}, statementType={}, catalog={}, schema={}",
+                connectionId, tableName, statementType, catalog, schema);
+        DbContext db = new DbContext(connectionId, catalog, schema);
+        return ApiResponse.success(sqlTemplateService.generate(db, tableName, statementType));
     }
 
     @DeleteMapping

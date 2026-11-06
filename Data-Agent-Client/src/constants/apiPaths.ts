@@ -7,6 +7,7 @@ export const ApiPaths = {
   TABLES_COMMENT: '/tables/comment',
   TABLES_ER_DIAGRAM: '/tables/er-diagram',
   TABLES_DDL: '/tables/ddl',
+  TABLES_SQL_TEMPLATE: '/tables/sql-template',
   TABLES_RENAME: '/tables/rename',
   TABLE_DATA: '/tables/data',
   TABLE_ROWS: '/tables/rows',

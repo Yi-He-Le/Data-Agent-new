@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   Background,
@@ -18,10 +19,31 @@ import { TableDblClickConsoleTargetEnum } from '../../constants/workspacePrefere
 import type { ConsoleTabMetadata, ErDiagramTabMetadata } from '../../types/tab';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
-import { downloadBlob, erDiagramFilename, renderErDiagramPng } from './erDiagramExport';
+import {
+  collectVectorEdges,
+  downloadBlob,
+  erDiagramCsvFilename,
+  erDiagramFilename,
+  renderErDiagramPng,
+  renderErDiagramSvg,
+  vectorTheme,
+  type ErDiagramExportFormat,
+} from './erDiagramExport';
+import { erDiagramCsvHeaders, renderErDiagramCsv } from './erDiagramCsv';
+import { renderErDiagramJson, toErDiagramDocument } from './erDiagramDocument';
+import { renderErDiagramMermaid } from './erDiagramMermaid';
+import { renderErDiagramPdf } from './erDiagramPdf';
+import { vectorTablesFromNodes } from './erDiagramVectorSvg';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/DropdownMenu';
 import { ErRelationEdgeView } from './ErDiagramEdge';
 import { ErTableNode, type ErTableNodeType } from './ErDiagramNode';
 import { ErDiagramMiniMap } from './ErDiagramMiniMap';
+import { ErDiagramTableDialog } from './ErDiagramTableDialog';
 import { ErDiagramZoomBar } from './ErDiagramZoomBar';
 import { buildDiagramEdges, ER_ROSE, ER_VIOLET, type ErRelationEdge } from './erDiagramEdges';
 import { ErDiagramInteractionContext, ErDiagramRectsContext } from './erDiagramInteraction';
@@ -59,7 +81,16 @@ import {
   type EndMark,
 } from './erDiagramRelations';
 import type { DiagramRect } from './erDiagramRoute';
+import {
+  DEFAULT_ER_TABLE_CHOICE,
+  erDiagramLimitNotice,
+  localDrawnTableNames,
+  showErDiagramTablePicker,
+  uniqueErTableNames,
+  type ErDiagramTableChoice,
+} from './erDiagramTableSelection';
 
+const EMPTY_TABLE_NAMES: string[] = [];
 const nodeTypes = { erTable: ErTableNode };
 const edgeTypes = { er: ErRelationEdgeView };
 
@@ -144,11 +175,20 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
   const [hasCustomLayout, setHasCustomLayout] = useState(false);
   const [tableNameFilter, setTableNameFilter] = useState('');
   const [exactTableFilter, setExactTableFilter] = useState(false);
+  // Kept on this mounted tab, so leaving and returning does not fall back to the first 80.
+  const [tableChoice, setTableChoice] = useState<ErDiagramTableChoice>(DEFAULT_ER_TABLE_CHOICE);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [catalogNames, setCatalogNames] = useState<string[] | null>(null);
+  const [catalogNamesLoading, setCatalogNamesLoading] = useState(false);
+  const [catalogNamesError, setCatalogNamesError] = useState('');
   const [nodes, setNodes, onNodesChange] = useNodesState<ErTableNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<ErRelationEdge>([]);
   const draggingRef = useRef(false);
   const flowRef = useRef<HTMLDivElement>(null);
   const requestId = useRef(0);
+  const loadToken = useRef(0);
+  const catalogGeneration = useRef(0);
+  const catalogRequestStarted = useRef(false);
   const framedToken = useRef(-1);
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [frameReady, setFrameReady] = useState(false);
@@ -156,35 +196,102 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
 
   useEffect(() => () => { requestId.current += 1; }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadDiagram = useCallback((choice: ErDiagramTableChoice, resetView: boolean) => {
+    const token = ++loadToken.current;
     setLoading(true);
-    setDiagram(null);
     setError('');
+    if (resetView) {
+      setDiagram(null);
+      setHoverState(null);
+      setPinned(null);
+    }
+    const catalog = metadata.catalog || undefined;
+    const schema = metadata.schema || undefined;
+    const request = choice.mode === 'default'
+      ? tableService.getErDiagram(String(metadata.connectionId), catalog, schema)
+      : tableService.loadErDiagram(metadata.connectionId, {
+        catalog,
+        schema,
+        all: choice.mode === 'all',
+        tables: choice.mode === 'names' ? choice.names : undefined,
+      });
+    request.then((result) => {
+      if (token !== loadToken.current) return;
+      setDiagram(result);
+      setTableChoice(choice);
+      setNodes([]);
+      setLayouting(true);
+      setLoading(false);
+    }).catch((err: unknown) => {
+      if (token !== loadToken.current) return;
+      const message = err instanceof Error ? err.message : t(I18N_KEYS.EXPLORER.ER_DIAGRAM_FAILED);
+      if (resetView) {
+        setDiagram(null);
+        setError(message);
+      } else {
+        toast.error(message);
+      }
+      setLoading(false);
+    });
+  }, [metadata.catalog, metadata.connectionId, metadata.schema, setNodes, t, toast]);
+
+  const loadDiagramRef = useRef(loadDiagram);
+  loadDiagramRef.current = loadDiagram;
+
+  useEffect(() => {
+    setTableChoice(DEFAULT_ER_TABLE_CHOICE);
     setHoverState(null);
     setPinned(null);
     setCollapseJunctionTables(false);
     setShowAllLines(false);
     setTableNameFilter('');
     setExactTableFilter(false);
-    tableService.getErDiagram(
-      String(metadata.connectionId),
-      metadata.catalog ?? undefined,
-      metadata.schema ?? undefined,
-    ).then((result) => {
-      if (!cancelled) setDiagram(result);
-    }).catch((err: unknown) => {
-      if (!cancelled) {
-        setDiagram(null);
-        setError(err instanceof Error ? err.message : t(I18N_KEYS.EXPLORER.ER_DIAGRAM_FAILED));
-      }
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+    setPickerOpen(false);
+    catalogGeneration.current += 1;
+    catalogRequestStarted.current = false;
+    setCatalogNames(null);
+    setCatalogNamesError('');
+    setCatalogNamesLoading(false);
+    loadDiagramRef.current(DEFAULT_ER_TABLE_CHOICE, true);
     return () => {
-      cancelled = true;
+      loadToken.current += 1;
     };
-  }, [metadata.catalog, metadata.connectionId, metadata.schema, t]);
+  }, [metadata.catalog, metadata.connectionId, metadata.schema]);
+
+  const drawnLocalNames = useMemo(
+    () => (diagram ? localDrawnTableNames(diagram.tables) : []),
+    [diagram],
+  );
+
+  const openTablePicker = () => {
+    setPickerOpen(true);
+    if (catalogNames !== null || catalogRequestStarted.current) return;
+    const generation = catalogGeneration.current;
+    catalogRequestStarted.current = true;
+    setCatalogNamesLoading(true);
+    setCatalogNamesError('');
+    tableService.listTables(
+      String(metadata.connectionId),
+      metadata.catalog || undefined,
+      metadata.schema || undefined,
+    ).then((names) => {
+      if (generation !== catalogGeneration.current) return;
+      setCatalogNames(uniqueErTableNames(names));
+    }).catch((err: unknown) => {
+      if (generation !== catalogGeneration.current) return;
+      catalogRequestStarted.current = false;
+      setCatalogNamesError(err instanceof Error ? err.message : t(I18N_KEYS.EXPLORER.ER_DIAGRAM_FAILED));
+    }).finally(() => {
+      if (generation !== catalogGeneration.current) return;
+      setCatalogNamesLoading(false);
+    });
+  };
+
+  const confirmTableChoice = (choice: ErDiagramTableChoice) => {
+    if (choice.mode === 'names' && choice.names.length === 0) return;
+    setPickerOpen(false);
+    loadDiagramRef.current(choice, false);
+  };
 
   const junctionTables = useMemo(() => {
     const tables = new Set<string>();
@@ -504,7 +611,7 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
     setHasCustomLayout(true);
   };
 
-  const exportImage = async () => {
+  const exportImage = async (format: Exclude<ErDiagramExportFormat, 'json' | 'mmd'>) => {
     const viewport = flowRef.current?.querySelector('.react-flow__viewport');
     if (!(viewport instanceof HTMLElement) || exporting || layouting) return;
     const currentNodes = getNodes();
@@ -514,14 +621,69 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
     const background = getComputedStyle(document.documentElement).getPropertyValue('--bg-main').trim() || '#f4f7fb';
     setExporting(true);
     try {
-      const blob = await renderErDiagramPng(viewport, bounds, background);
+      const diagram = {
+        tables: vectorTablesFromNodes(currentNodes as ErTableNodeType[], {
+          linked: linkedColumns,
+          highlighted: highlightedColumns,
+          junctions: junctionTables,
+          external: t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXTERNAL),
+          junction: t(I18N_KEYS.EXPLORER.ER_DIAGRAM_JUNCTION),
+          expand: (hidden: number) => t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPAND_COLUMNS, { count: hidden }),
+          collapse: t(I18N_KEYS.EXPLORER.ER_DIAGRAM_COLLAPSE_COLUMNS),
+        }),
+        edges: collectVectorEdges(viewport, edges),
+        theme: vectorTheme(background),
+      };
+      const blob = format === 'png'
+        ? await renderErDiagramPng(viewport, bounds, background)
+        : format === 'pdf'
+          ? await renderErDiagramPdf(diagram)
+          : renderErDiagramSvg(diagram);
       const name = metadata.databaseName || metadata.schemaName || metadata.connectionName || 'er-diagram';
-      downloadBlob(blob, erDiagramFilename(name));
+      downloadBlob(blob, erDiagramFilename(name, format));
       toast.success(t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORTED));
     } catch {
       toast.error(t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_FAILED));
     } finally {
       setExporting(false);
+    }
+  };
+
+  const exportJson = () => {
+    if (!shown || exporting || layouting) return;
+    const name = metadata.databaseName || metadata.schemaName || metadata.connectionName || 'er-diagram';
+    try {
+      const json = renderErDiagramJson(toErDiagramDocument(shown));
+      downloadBlob(new Blob([json], { type: 'application/json;charset=utf-8' }), erDiagramFilename(name, 'json'));
+      toast.success(t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORTED));
+    } catch {
+      toast.error(t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_FAILED));
+    }
+  };
+
+  const exportCsv = () => {
+    if (!shown || exporting || layouting) return;
+    const name = metadata.databaseName || metadata.schemaName || metadata.connectionName || 'er-diagram';
+    try {
+      const csv = renderErDiagramCsv(toErDiagramDocument(shown), erDiagramCsvHeaders((key) => t(key)));
+      const type = 'text/csv;charset=utf-8';
+      downloadBlob(new Blob([csv.tables], { type }), erDiagramCsvFilename(name, 'tables'));
+      downloadBlob(new Blob([csv.relations], { type }), erDiagramCsvFilename(name, 'relations'));
+      toast.success(t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORTED));
+    } catch {
+      toast.error(t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_FAILED));
+    }
+  };
+
+  const exportMermaid = () => {
+    if (!shown || exporting || layouting) return;
+    const name = metadata.databaseName || metadata.schemaName || metadata.connectionName || 'er-diagram';
+    try {
+      const text = renderErDiagramMermaid(toErDiagramDocument(shown));
+      downloadBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), erDiagramFilename(name, 'mmd'));
+      toast.success(t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORTED));
+    } catch {
+      toast.error(t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_FAILED));
     }
   };
 
@@ -531,7 +693,10 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
     return via ? `${text} ${t(I18N_KEYS.EXPLORER.ER_DIAGRAM_VIA, { table: via })}` : text;
   }).join(' · ');
   const statusText = relationSummary || t(I18N_KEYS.EXPLORER.ER_DIAGRAM_HINT);
-  const showCanvas = !loading && !error && !!shown && shown.tables.length > 0;
+  const localTableCount = diagram ? diagram.tables.filter((table) => !table.external).length : 0;
+  const limitNotice = erDiagramLimitNotice(tableChoice, diagram?.truncated === true);
+  const showTablePicker = showErDiagramTablePicker(diagram?.tableCount);
+  const showCanvas = !error && !!shown && shown.tables.length > 0;
 
   return (
     <ErDiagramInteractionContext.Provider value={interaction}>
@@ -549,10 +714,21 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
                   })}
                 </span>
               )}
-              {diagram?.truncated && (
-                <span>{t(I18N_KEYS.EXPLORER.ER_DIAGRAM_TRUNCATED, {
-                  count: diagram.tables.filter((table) => !table.external).length,
-                })}</span>
+              {limitNotice === 'truncated' && (
+                <span>{t(I18N_KEYS.EXPLORER.ER_DIAGRAM_TRUNCATED, { count: localTableCount })}</span>
+              )}
+              {limitNotice === 'selected' && (
+                <span>{t(I18N_KEYS.EXPLORER.ER_DIAGRAM_SELECT_TABLES_STATUS, { count: localTableCount })}</span>
+              )}
+              {showTablePicker && (
+                <button
+                  type="button"
+                  className="rounded border theme-border px-2 py-0.5 theme-text-primary disabled:opacity-40"
+                  disabled={loading}
+                  onClick={openTablePicker}
+                >
+                  {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_SELECT_TABLES)}
+                </button>
               )}
               {diagram?.externalTruncated && (
                 <span>{t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXTERNAL_TRUNCATED, {
@@ -608,14 +784,38 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
                 </button>
               )}
               {showCanvas && (
-                <button
-                  type="button"
-                  className="rounded border theme-border px-2 py-0.5 theme-text-primary disabled:opacity-40"
-                  disabled={exporting || layouting || nodes.length === 0}
-                  onClick={() => { void exportImage(); }}
-                >
-                  {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT)}
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded border theme-border px-2 py-0.5 theme-text-primary disabled:opacity-40"
+                      disabled={exporting || layouting || nodes.length === 0}
+                    >
+                      {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT)}
+                      <ChevronDown className="h-3 w-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[8rem]">
+                    <DropdownMenuItem className="text-xs" onClick={() => { void exportImage('png'); }}>
+                      {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_PNG)}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={() => { void exportImage('svg'); }}>
+                      {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_SVG)}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={() => { void exportImage('pdf'); }}>
+                      {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_PDF)}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={exportJson}>
+                      {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_JSON)}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={exportCsv}>
+                      {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_CSV)}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={exportMermaid}>
+                      {t(I18N_KEYS.EXPLORER.ER_DIAGRAM_EXPORT_MERMAID)}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {showCanvas && (
                 <button
@@ -661,7 +861,7 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
           </div>
           <div className="relative min-h-0 flex-1">
             {loading && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center text-sm theme-text-secondary">
+              <div className="theme-bg-main absolute inset-0 z-10 flex items-center justify-center text-sm theme-text-secondary">
                 {t(I18N_KEYS.EXPLORER.LOADING)}
               </div>
             )}
@@ -714,6 +914,15 @@ function ErDiagramCanvas({ metadata }: ErDiagramTabProps) {
               </div>
             )}
           </div>
+          <ErDiagramTableDialog
+            open={pickerOpen}
+            names={catalogNames ?? EMPTY_TABLE_NAMES}
+            namesLoading={catalogNamesLoading}
+            namesError={catalogNamesError}
+            drawnNames={drawnLocalNames}
+            onOpenChange={setPickerOpen}
+            onConfirm={confirmTableChoice}
+          />
         </div>
       </ErDiagramRectsContext.Provider>
     </ErDiagramInteractionContext.Provider>
