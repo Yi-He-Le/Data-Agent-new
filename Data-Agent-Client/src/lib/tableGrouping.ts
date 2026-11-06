@@ -16,7 +16,8 @@ function makeTableNode(
   schema: string | undefined,
   name: string,
   groupId?: string,
-  groupKind?: 'manual' | 'rule'
+  groupKind?: 'manual' | 'rule',
+  comment?: string
 ): ExplorerNode {
   const node: ExplorerNode = {
     id: `${prefix}${ExplorerIdPrefix.TABLE}${name}`,
@@ -30,6 +31,9 @@ function makeTableNode(
   if (groupId && groupKind) {
     node.groupId = groupId;
     node.groupKind = groupKind;
+  }
+  if (comment?.trim()) {
+    node.comment = comment;
   }
   return node;
 }
@@ -83,8 +87,9 @@ export function buildTablesFolderChildren(opts: {
   schema?: string;
   folderId: string;
   tableNames: string[];
+  tableComments?: Record<string, string>;
 }): ExplorerNode[] {
-  const { connectionId, catalog, schema, folderId, tableNames } = opts;
+  const { connectionId, catalog, schema, folderId, tableNames, tableComments } = opts;
   const scope = tableGroupScopeKey(connectionId, catalog, schema);
   const groups = useTableGroupStore.getState().groupsByScope[scope] ?? [];
 
@@ -106,7 +111,16 @@ export function buildTablesFolderChildren(opts: {
     const kind: 'manual' | 'rule' = isManualGroup(group) ? 'manual' : 'rule';
     const children = tableNames
       .filter((name) => tableToGroup.get(name)?.id === group.id)
-      .map((name) => makeTableNode(groupId, connectionId, catalog, schema, name, group.id, kind));
+      .map((name) => makeTableNode(
+        groupId,
+        connectionId,
+        catalog,
+        schema,
+        name,
+        group.id,
+        kind,
+        tableComments?.[name]
+      ));
     return {
       id: groupId,
       name: group.name,
@@ -122,7 +136,16 @@ export function buildTablesFolderChildren(opts: {
 
   const ungrouped = tableNames
     .filter((name) => !tableToGroup.has(name))
-    .map((name) => makeTableNode(folderId, connectionId, catalog, schema, name));
+    .map((name) => makeTableNode(
+      folderId,
+      connectionId,
+      catalog,
+      schema,
+      name,
+      undefined,
+      undefined,
+      tableComments?.[name]
+    ));
 
   const all: ExplorerNode[] = [...groupNodes, ...ungrouped];
   all.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
