@@ -153,7 +153,7 @@ public class FileModelStore {
                 if(m.tokenLimits()!=null) {
                     var limits=m.tokenLimits();
                     if(limits.maxContextTokens()!=null && ModelTokenPolicy.context(m.modelId(),limits.maxContextTokens())!=m.maxContextTokens())throw new IllegalArgumentException();
-                    if(!Objects.equals(m.options().maxOutputTokens(),ModelTokenPolicy.output(limits.maxOutputTokens(),m.maxContextTokens(),m.options().thinkingMode(),m.options().thinkingBudget(),ModelPurpose.MAIN_CHAT)))throw new IllegalArgumentException();
+                    if(!Objects.equals(m.options().maxOutputTokens(),ModelTokenPolicy.effectiveOutput(source.compatibilityProfile(),limits.maxOutputTokens(),m.maxContextTokens(),m.options().thinkingMode(),m.options().thinkingBudget(),ModelPurpose.MAIN_CHAT)))throw new IllegalArgumentException();
                 }
                 if(!Objects.equals(m.options().maxOutputTokens(),ProviderCompatibilityPolicy.effectiveOutputLimit(definition,connection))
                         || !Objects.equals(m.options().reasoningEffort(),ProviderCompatibilityPolicy.effectiveReasoningEffort(definition,connection)))throw new IllegalArgumentException();
