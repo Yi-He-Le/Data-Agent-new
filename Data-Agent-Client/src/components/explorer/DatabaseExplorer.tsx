@@ -461,6 +461,15 @@ export function DatabaseExplorer() {
         }
       };
       collect(treeDataState);
+      // CREATE/DROP DATABASE or SCHEMA changes the connection's direct children.
+      if (detail.objectType === 'DATABASE' || detail.objectType === 'SCHEMA') {
+        const root = nodes.find(
+          (node) => node.type === ExplorerNodeType.ROOT
+            && node.connectionId === String(detail.connectionId)
+        );
+        if (root) void refreshNodeById(root.id);
+        return;
+      }
       const matchingScope = (node: ExplorerNode) =>
         node.connectionId === String(detail.connectionId)
         && (node.catalog ?? '') === (detail.catalog ?? '');

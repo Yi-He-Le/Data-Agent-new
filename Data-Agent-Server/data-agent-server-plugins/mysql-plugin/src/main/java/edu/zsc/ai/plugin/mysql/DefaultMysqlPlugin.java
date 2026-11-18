@@ -24,7 +24,7 @@ import java.util.Map;
 
 public abstract class DefaultMysqlPlugin extends AbstractDatabasePlugin
         implements ConnectionManager, CommandExecutor<SqlCommandRequest, SqlCommandResult>, DatabaseManager,
-        TableManager, ViewManager, ColumnManager, IndexManager,
+        TableManager, ViewManager, ColumnManager, IndexManager, ConstraintManager,
         FunctionManager, ProcedureManager, TriggerManager, SqlSplitter, SqlValidator, SqlAnalyzer {
 
     private final ConnectionManager connectionManager = new MysqlConnectionManager(
@@ -40,6 +40,7 @@ public abstract class DefaultMysqlPlugin extends AbstractDatabasePlugin
     private final ViewManager viewManager = new MysqlViewManager(capabilitySupport);
     private final ColumnManager columnManager = new MysqlColumnManager(capabilitySupport);
     private final IndexManager indexManager = new MysqlIndexManager();
+    private final ConstraintManager constraintManager = new MysqlConstraintManager(capabilitySupport);
     private final FunctionManager functionManager = new MysqlFunctionManager(capabilitySupport);
     private final ProcedureManager procedureManager = new MysqlProcedureManager(capabilitySupport);
     private final TriggerManager triggerManager = new MysqlTriggerManager(capabilitySupport);
@@ -316,6 +317,23 @@ public abstract class DefaultMysqlPlugin extends AbstractDatabasePlugin
     @Override
     public List<IndexMetadata> getIndexes(Connection connection, String catalog, String schema, String tableName) {
         return indexManager.getIndexes(connection, catalog, schema, tableName);
+    }
+
+    @Override
+    public List<ConstraintMetadata> getConstraints(Connection connection, String catalog,
+                                                   String schema, String tableName) {
+        return constraintManager.getConstraints(connection, catalog, schema, tableName);
+    }
+
+    @Override
+    public String getConstraintDdl(Connection connection, String catalog, String schema, String constraintName) {
+        return constraintManager.getConstraintDdl(connection, catalog, schema, constraintName);
+    }
+
+    @Override
+    public void deleteConstraint(Connection connection, String catalog, String schema,
+                                 String tableName, String constraintName) {
+        constraintManager.deleteConstraint(connection, catalog, schema, tableName, constraintName);
     }
 
     @Override

@@ -25,8 +25,17 @@ public abstract class AbstractSchemaObjectComparator implements SchemaObjectComp
     protected record Item(String key, Map<String, String> attributes) {
     }
 
+    /** 元数据不可用时的占位对象键。 */
+    private static final String UNKNOWN_KEY = "(metadata unavailable)";
+
     @Override
     public List<ObjectDiff> compare(TableSnapshot source, TableSnapshot target, CompareContext context) {
+        String sourceError = metadataError(source);
+        String targetError = metadataError(target);
+        if (sourceError != null || targetError != null) {
+            return List.of(new ObjectDiff(objectType(), UNKNOWN_KEY, DiffStatus.UNKNOWN,
+                    List.of(new AttributeDiff("METADATA", sourceError, targetError))));
+        }
         return compareItems(entries(source, context), entries(target, context), objectType());
     }
 

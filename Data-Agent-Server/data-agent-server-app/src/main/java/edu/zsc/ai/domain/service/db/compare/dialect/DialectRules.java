@@ -20,4 +20,12 @@ public interface DialectRules {
 
     /** 注释归一化；空白视为无注释。 */
     String normalizeComment(String comment);
+
+    /**
+     * 是否为数据库自动生成的索引名（如达梦的 INDEX33555526）。
+     * 这类名字随对象创建顺序变化，两端必然不同，比较时应按索引结构匹配。
+     */
+    default boolean isGeneratedIndexName(String name) {
+        return false;
+    }
 }

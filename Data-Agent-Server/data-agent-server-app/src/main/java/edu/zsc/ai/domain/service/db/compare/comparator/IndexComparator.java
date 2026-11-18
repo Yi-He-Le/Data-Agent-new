@@ -19,6 +19,11 @@ public class IndexComparator extends AbstractSchemaObjectComparator {
     }
 
     @Override
+    public String metadataError(TableSnapshot table) {
+        return table.indexError();
+    }
+
+    @Override
     protected List<Item> entries(TableSnapshot table, CompareContext context) {
         List<Item> items = new ArrayList<>();
         for (IndexSnapshot index : table.indexes()) {
@@ -28,11 +33,16 @@ public class IndexComparator extends AbstractSchemaObjectComparator {
             List<String> columns = index.columns().stream()
                     .map(context.rules()::normalizeIdentifier)
                     .toList();
+            String type = index.type() == null ? null : index.type().trim().toUpperCase(Locale.ROOT);
+            // 自动生成的索引名两端必然不同，改用结构作为键，避免整表误报差异。
+            String key = context.rules().isGeneratedIndexName(index.name())
+                    ? "SYS_INDEX(" + yesNo(index.unique()) + "," + type + "," + join(columns) + ")"
+                    : context.rules().normalizeIdentifier(index.name());
             items.add(item(
-                    context.rules().normalizeIdentifier(index.name()),
+                    key,
                     attributes(
                             "UNIQUE", yesNo(index.unique()),
-                            "TYPE", index.type() == null ? null : index.type().trim().toUpperCase(Locale.ROOT),
+                            "TYPE", type,
                             "COLUMNS", join(columns)
                     )
             ));

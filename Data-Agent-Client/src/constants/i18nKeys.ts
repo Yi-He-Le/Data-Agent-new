@@ -483,6 +483,7 @@ export const I18N_KEYS = {
     SCHEMA_COMPARE_DIFFERENT: 'explorer.schema_compare_different',
     SCHEMA_COMPARE_SAME: 'explorer.schema_compare_same',
     SCHEMA_COMPARE_READ_ERROR: 'explorer.schema_compare_read_error',
+    SCHEMA_COMPARE_UNKNOWN: 'explorer.schema_compare_unknown',
     SCHEMA_COMPARE_ALL: 'explorer.schema_compare_all',
     SCHEMA_COMPARE_NO_OBJECTS: 'explorer.schema_compare_no_objects',
     SCHEMA_COMPARE_OBJECT_COLUMN: 'explorer.schema_compare_object_column',

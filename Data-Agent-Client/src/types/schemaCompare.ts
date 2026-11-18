@@ -1,5 +1,11 @@
-/** 结构比较的五种状态，与后端 DiffStatus 一致。 */
-export type SchemaDiffStatus = 'ONLY_SOURCE' | 'ONLY_TARGET' | 'DIFFERENT' | 'SAME' | 'READ_ERROR';
+/** 结构比较的六种状态，与后端 DiffStatus 一致；UNKNOWN 表示元数据不可用、无法判定。 */
+export type SchemaDiffStatus =
+  | 'ONLY_SOURCE'
+  | 'ONLY_TARGET'
+  | 'DIFFERENT'
+  | 'SAME'
+  | 'READ_ERROR'
+  | 'UNKNOWN';
 
 /** 参与比较的对象类型，与后端 DiffObjectType 一致。 */
 export type SchemaDiffObjectType =
@@ -38,11 +44,13 @@ export interface SchemaCompareSummary {
   different: number;
   same: number;
   readError: number;
+  unknown: number;
 }
 
 export interface SchemaCompareResult {
   summary: SchemaCompareSummary;
   tables: SchemaTableDiff[];
+  warnings: string[];
 }
 
 export interface SchemaCompareParams {

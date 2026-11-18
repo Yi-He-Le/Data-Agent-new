@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 同库结构比较，只读接口。 */
+/** 库/模式结构比较（支持跨连接），只读接口。 */
 @Validated
 @RestController
 @RequestMapping("/api/schema")

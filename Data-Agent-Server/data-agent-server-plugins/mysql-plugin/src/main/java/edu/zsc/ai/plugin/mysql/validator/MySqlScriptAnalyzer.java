@@ -5,17 +5,36 @@ import edu.zsc.ai.plugin.capability.SqlSplitter;
 import edu.zsc.ai.plugin.model.sql.SqlError;
 import edu.zsc.ai.plugin.model.sql.SqlScriptAnalysis;
 import edu.zsc.ai.plugin.model.sql.SqlStatementAnalysis;
+import edu.zsc.ai.plugin.model.sql.SqlType;
 import edu.zsc.ai.plugin.mysql.parser.MySqlLexer;
 import edu.zsc.ai.plugin.mysql.parser.MySqlParser;
 import org.antlr.v4.runtime.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Shares parser boundaries between cursor execution and batch execution. */
 public final class MySqlScriptAnalyzer implements SqlAnalyzer, SqlSplitter {
     public static final MySqlScriptAnalyzer INSTANCE = new MySqlScriptAnalyzer();
+
+    /** DDL target kind, used by the explorer to refresh the matching tree folder. */
+    private static final Pattern OBJECT_TYPE_PATTERN = Pattern.compile(
+            "(?is)^\\s*(?:CREATE|ALTER|DROP|TRUNCATE)\\s+"
+                    + "(?:OR\\s+REPLACE\\s+)?(?:TEMPORARY\\s+)?(?:UNIQUE\\s+)?(?:FULLTEXT\\s+|SPATIAL\\s+)?"
+                    + "(TABLE|VIEW|INDEX|TRIGGER|PROCEDURE|FUNCTION|EVENT|DATABASE|SCHEMA|SEQUENCE|CONSTRAINT)\\b");
+
+    private static String detectObjectType(String sql, SqlType type) {
+        if (type != SqlType.CREATE && type != SqlType.ALTER
+                && type != SqlType.DROP && type != SqlType.TRUNCATE) {
+            return null;
+        }
+        Matcher matcher = OBJECT_TYPE_PATTERN.matcher(sql);
+        return matcher.find() ? matcher.group(1).toUpperCase(Locale.ROOT) : null;
+    }
 
     @Override
     public SqlScriptAnalysis analyze(String sql) {
@@ -55,7 +74,7 @@ public final class MySqlScriptAnalyzer implements SqlAnalyzer, SqlSplitter {
             int endLine = stop.getLine() + (int) tail.chars().filter(c -> c == '\n').count();
             int endColumn = tail.contains("\n") ? tail.length() - tail.lastIndexOf('\n') - 1
                     : stop.getCharPositionInLine() + tail.length();
-            statements.add(new SqlStatementAnalysis(text, type, null,
+            statements.add(new SqlStatementAnalysis(text, type, detectObjectType(text, type),
                     start.getLine(), start.getCharPositionInLine(), endLine, endColumn, from, to,
                     extractor.getTables(), extractor.getColumns(), Map.of(), type.isReadOnly(), text));
         }

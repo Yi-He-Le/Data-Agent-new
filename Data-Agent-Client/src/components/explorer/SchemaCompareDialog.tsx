@@ -77,6 +77,11 @@ const STATUS_META: Record<SchemaDiffStatus, StatusMeta> = {
     dot: 'bg-red-500',
     soft: 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300',
   },
+  UNKNOWN: {
+    label: I18N_KEYS.EXPLORER.SCHEMA_COMPARE_UNKNOWN,
+    dot: 'bg-slate-400',
+    soft: 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-500/30 dark:bg-slate-500/10 dark:text-slate-300',
+  },
 };
 
 const OBJECT_I18N: Record<SchemaDiffObjectType, string> = {
@@ -101,9 +106,12 @@ const ATTRIBUTE_LABELS: Record<string, string> = {
   POSITION: 'POSITION',
   COLUMNS: 'COLUMNS',
   UNIQUE: 'UNIQUE',
+  REFERENCES_SCHEMA: 'REFERENCES_SCHEMA',
   REFERENCES_TABLE: 'REFERENCES_TABLE',
   REFERENCES_COLUMNS: 'REFERENCES_COLUMNS',
   EXPRESSION: 'EXPRESSION',
+  ENABLED: 'ENABLED',
+  METADATA: 'METADATA',
 };
 
 const MAX_RENDERED_OBJECTS = 60;
@@ -729,6 +737,19 @@ export function SchemaCompareDialog({
             ) : (
               <div className="flex h-full min-h-0 flex-col">
                 <SummaryBar result={result} filter={statusFilter} onFilterChange={setStatusFilter} />
+                {(result.warnings?.length ?? 0) > 0 && (
+                  <div className="flex shrink-0 flex-col gap-1 px-6 pb-2">
+                    {result.warnings.map((warning) => (
+                      <div
+                        key={warning}
+                        className="flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300"
+                      >
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        <span className="break-all">{warning}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex min-h-0 flex-1 gap-3 px-6 pb-4">
                   <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-white dark:bg-gray-900">
                     <div className="flex items-center justify-between border-b border-border bg-gray-50/70 px-3 py-1.5 text-[11px] font-medium text-gray-500 dark:bg-gray-900/60">
@@ -1100,6 +1121,7 @@ function SummaryBar({ result, filter, onFilterChange }: SummaryBarProps) {
     { key: 'DIFFERENT', count: result.summary.different },
     { key: 'SAME', count: result.summary.same },
     { key: 'READ_ERROR', count: result.summary.readError },
+    { key: 'UNKNOWN', count: result.summary.unknown },
   ];
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 px-6 py-3">

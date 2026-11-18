@@ -11,5 +11,7 @@ public enum DiffStatus {
     /** 两端定义一致。 */
     SAME,
     /** 元数据读取失败，无法判断。 */
-    READ_ERROR
+    READ_ERROR,
+    /** 该类对象元数据不可用（读取失败或驱动不支持），与“确实不存在”区分开。 */
+    UNKNOWN
 }

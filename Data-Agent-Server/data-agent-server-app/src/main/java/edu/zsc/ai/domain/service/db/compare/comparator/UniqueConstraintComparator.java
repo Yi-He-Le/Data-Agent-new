@@ -17,6 +17,11 @@ public class UniqueConstraintComparator extends AbstractSchemaObjectComparator {
     }
 
     @Override
+    public String metadataError(TableSnapshot table) {
+        return table.constraintError();
+    }
+
+    @Override
     protected List<Item> entries(TableSnapshot table, CompareContext context) {
         return table.constraints().stream()
                 .filter(constraint -> "UNIQUE".equals(constraintType(constraint.type())))
@@ -31,6 +36,9 @@ public class UniqueConstraintComparator extends AbstractSchemaObjectComparator {
         String key = constraint.name() != null && !constraint.name().isBlank()
                 ? context.rules().normalizeIdentifier(constraint.name())
                 : join(columns);
-        return item(key, attributes("COLUMNS", join(columns)));
+        return item(key, attributes(
+                "COLUMNS", join(columns),
+                "ENABLED", yesNo(constraint.enabled())
+        ));
     }
 }

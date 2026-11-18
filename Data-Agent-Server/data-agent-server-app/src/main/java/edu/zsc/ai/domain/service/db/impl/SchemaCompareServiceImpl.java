@@ -3,6 +3,7 @@ package edu.zsc.ai.domain.service.db.impl;
 import edu.zsc.ai.domain.exception.BusinessException;
 import edu.zsc.ai.domain.model.context.DbContext;
 import edu.zsc.ai.domain.model.dto.request.db.SchemaCompareRequest;
+import edu.zsc.ai.domain.service.db.ConnectionAccessService;
 import edu.zsc.ai.domain.service.db.ConnectionService;
 import edu.zsc.ai.domain.service.db.SchemaCompareService;
 import edu.zsc.ai.domain.service.db.compare.comparator.CompareContext;
@@ -41,9 +42,12 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
     private final SchemaComparatorRegistry comparatorRegistry;
     private final DialectRulesRegistry dialectRulesRegistry;
     private final ConnectionService connectionService;
+    private final ConnectionAccessService connectionAccessService;
 
     @Override
     public SchemaCompareResult compare(SchemaCompareRequest request) {
+        // 结构比较属于工作台能力，COMMON 成员不能通过接口直接调用。
+        connectionAccessService.assertWorkbenchApiAllowed();
         Long sourceConnectionId = request.getSourceConnectionId() != null
                 ? request.getSourceConnectionId() : request.getConnectionId();
         Long targetConnectionId = request.getTargetConnectionId() != null
@@ -55,7 +59,7 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
         DbContext source = toContext(sourceConnectionId, request.getSourceCatalog(), request.getSourceSchema());
         DbContext target = toContext(targetConnectionId, request.getTargetCatalog(), request.getTargetSchema());
         if (source.equals(target)) {
-            throw new BusinessException("源与目标不能是同一个库或模式");
+            throw new BusinessException("源与目标指向了同一个对象，请选择不同的库、模式或连接");
         }
 
         connectionService.openConnection(source);
@@ -76,8 +80,9 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
         SchemaSnapshot sourceSnapshot = snapshotReader.read(source, options);
         SchemaSnapshot targetSnapshot = snapshotReader.read(target, options);
 
-        Map<String, TableSnapshot> sourceTables = indexByName(sourceSnapshot.tables(), rules);
-        Map<String, TableSnapshot> targetTables = indexByName(targetSnapshot.tables(), rules);
+        List<String> warnings = new ArrayList<>();
+        Map<String, TableSnapshot> sourceTables = indexByName(sourceSnapshot.tables(), rules, warnings);
+        Map<String, TableSnapshot> targetTables = indexByName(targetSnapshot.tables(), rules, warnings);
 
         Set<String> tableKeys = new LinkedHashSet<>(sourceTables.keySet());
         tableKeys.addAll(targetTables.keySet());
@@ -97,7 +102,7 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
             }
         }
 
-        return new SchemaCompareResult(summarize(tableDiffs), tableDiffs);
+        return new SchemaCompareResult(summarize(tableDiffs), tableDiffs, warnings);
     }
 
     private TableDiff compareTable(TableSnapshot source, TableSnapshot target, CompareContext context) {
@@ -116,12 +121,18 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
             objects.addAll(comparator.compare(source, target, context));
         }
 
-        boolean different = objects.stream().anyMatch(object -> object.status() != DiffStatus.SAME);
+        boolean different = objects.stream().anyMatch(object -> object.status() == DiffStatus.ONLY_SOURCE
+                || object.status() == DiffStatus.ONLY_TARGET
+                || object.status() == DiffStatus.DIFFERENT);
+        // 只有“无法判断”而不存在真实差异时，表状态为 UNKNOWN，不能显示为一致。
+        boolean unknown = objects.stream().anyMatch(object -> object.status() == DiffStatus.UNKNOWN);
+        DiffStatus status = different ? DiffStatus.DIFFERENT
+                : unknown ? DiffStatus.UNKNOWN : DiffStatus.SAME;
         String message = Stream.of(source.auxiliaryError(), target.auxiliaryError())
                 .filter(Objects::nonNull)
                 .reduce((left, right) -> left + "; " + right)
                 .orElse(null);
-        return new TableDiff(source.name(), different ? DiffStatus.DIFFERENT : DiffStatus.SAME, objects, message);
+        return new TableDiff(source.name(), status, objects, message);
     }
 
     private static CompareSummary summarize(List<TableDiff> tables) {
@@ -130,6 +141,7 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
         int different = 0;
         int same = 0;
         int readError = 0;
+        int unknown = 0;
         for (TableDiff table : tables) {
             switch (table.status()) {
                 case ONLY_SOURCE -> onlySource++;
@@ -137,15 +149,29 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
                 case DIFFERENT -> different++;
                 case SAME -> same++;
                 case READ_ERROR -> readError++;
+                case UNKNOWN -> unknown++;
             }
         }
-        return new CompareSummary(onlySource, onlyTarget, different, same, readError);
+        return new CompareSummary(onlySource, onlyTarget, different, same, readError, unknown);
     }
 
-    private static Map<String, TableSnapshot> indexByName(List<TableSnapshot> tables, DialectRules rules) {
+    /**
+     * 按归一化名称建索引。归一化后重名（如 foo 与 FOO）时不能静默丢弃，
+     * 追加原名区分后各自参与比较，并记录告警提示用户。
+     */
+    private static Map<String, TableSnapshot> indexByName(List<TableSnapshot> tables, DialectRules rules,
+                                                          List<String> warnings) {
         Map<String, TableSnapshot> map = new LinkedHashMap<>();
         for (TableSnapshot table : tables) {
-            map.putIfAbsent(rules.normalizeIdentifier(table.name()), table);
+            String key = rules.normalizeIdentifier(table.name());
+            TableSnapshot existing = map.get(key);
+            if (existing == null) {
+                map.put(key, table);
+                continue;
+            }
+            map.put(key + "#" + table.name(), table);
+            warnings.add("表名归一化冲突：" + existing.name() + " 与 " + table.name()
+                    + " 归一化后同名，已分别比较");
         }
         return map;
     }

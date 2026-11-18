@@ -17,6 +17,11 @@ public class ForeignKeyComparator extends AbstractSchemaObjectComparator {
     }
 
     @Override
+    public String metadataError(TableSnapshot table) {
+        return table.constraintError();
+    }
+
+    @Override
     protected List<Item> entries(TableSnapshot table, CompareContext context) {
         return table.constraints().stream()
                 .filter(constraint -> "FOREIGN_KEY".equals(constraintType(constraint.type())))
@@ -32,13 +37,16 @@ public class ForeignKeyComparator extends AbstractSchemaObjectComparator {
                 .map(context.rules()::normalizeIdentifier)
                 .toList();
         String referencedTable = context.rules().normalizeIdentifier(constraint.referencedTable());
+        String referencedSchema = context.rules().normalizeIdentifier(constraint.referencedSchema());
         String key = constraint.name() != null && !constraint.name().isBlank()
                 ? context.rules().normalizeIdentifier(constraint.name())
                 : join(columns) + "->" + referencedTable;
         return item(key, attributes(
                 "COLUMNS", join(columns),
+                "REFERENCES_SCHEMA", referencedSchema,
                 "REFERENCES_TABLE", referencedTable,
-                "REFERENCES_COLUMNS", join(referencedColumns)
+                "REFERENCES_COLUMNS", join(referencedColumns),
+                "ENABLED", yesNo(constraint.enabled())
         ));
     }
 }

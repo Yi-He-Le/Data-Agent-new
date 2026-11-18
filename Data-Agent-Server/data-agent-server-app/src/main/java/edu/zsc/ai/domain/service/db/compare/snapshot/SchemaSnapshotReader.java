@@ -57,6 +57,8 @@ public class SchemaSnapshotReader {
         List<IndexSnapshot> indexes = List.of();
         List<ConstraintSnapshot> constraints = List.of();
         String columnError = null;
+        String indexError = null;
+        String constraintError = null;
         List<String> auxiliaryErrors = new ArrayList<>();
 
         try {
@@ -72,7 +74,8 @@ public class SchemaSnapshotReader {
                     .map(this::toIndexSnapshot)
                     .toList();
         } catch (Exception e) {
-            auxiliaryErrors.add("indexes: " + message(e));
+            indexError = "indexes: " + message(e);
+            auxiliaryErrors.add(indexError);
         }
 
         try {
@@ -80,15 +83,17 @@ public class SchemaSnapshotReader {
                     .map(this::toConstraintSnapshot)
                     .toList();
         } catch (Exception e) {
-            // MySQL 等插件尚未实现约束能力，这里降级为“无约束信息”，不把整张表判成读取失败。
-            auxiliaryErrors.add("constraints: " + message(e));
+            // 部分插件尚未实现约束能力：记为“未知”，不当作空集合，避免误报缺失或一致。
+            constraintError = "constraints: " + message(e);
+            auxiliaryErrors.add(constraintError);
         }
 
         if (columnError != null) {
             log.warn("Schema compare: cannot read columns of {}.{}: {}", db.schema(), tableName, columnError);
         }
         String auxiliaryError = auxiliaryErrors.isEmpty() ? null : String.join("; ", auxiliaryErrors);
-        return new TableSnapshot(tableName, comment, columns, indexes, constraints, columnError, auxiliaryError);
+        return new TableSnapshot(tableName, comment, columns, indexes, constraints,
+                columnError, indexError, constraintError, auxiliaryError);
     }
 
     private Map<String, String> loadComments(DbContext db) {
