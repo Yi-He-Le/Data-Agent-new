@@ -17,8 +17,15 @@ public record TableSnapshot(
         String columnError,
         String indexError,
         String constraintError,
-        String auxiliaryError
+        String auxiliaryError,
+        String commentError
 ) {
+
+    public TableSnapshot(String name, String comment, List<ColumnSnapshot> columns, List<IndexSnapshot> indexes,
+                         List<ConstraintSnapshot> constraints, String columnError, String indexError,
+                         String constraintError, String auxiliaryError) {
+        this(name, comment, columns, indexes, constraints, columnError, indexError, constraintError, auxiliaryError, null);
+    }
 
     public boolean columnsReadable() {
         return columnError == null || columnError.isBlank();

@@ -22,7 +22,7 @@ import java.util.Set;
 public abstract class AbstractSchemaObjectComparator implements SchemaObjectComparator {
 
     /** 一个待比较对象：归一化 key + 归一化属性表。 */
-    protected record Item(String key, Map<String, String> attributes) {
+    protected record Item(String key, Map<String, String> attributes, String originalName) {
     }
 
     /** 元数据不可用时的占位对象键。 */
@@ -42,17 +42,21 @@ public abstract class AbstractSchemaObjectComparator implements SchemaObjectComp
     /** 子类从表快照中提取本类对象。 */
     protected abstract List<Item> entries(TableSnapshot table, CompareContext context);
 
-    private List<ObjectDiff> compareItems(List<Item> sourceItems, List<Item> targetItems,
+    protected final List<ObjectDiff> compareItems(List<Item> sourceItems, List<Item> targetItems,
                                           DiffObjectType objectType) {
-        Map<String, Item> sourceByKey = index(sourceItems);
-        Map<String, Item> targetByKey = index(targetItems);
-        Set<String> keys = new LinkedHashSet<>(sourceByKey.keySet());
+        Set<String> ambiguous = new LinkedHashSet<>();
+        findCollisions(sourceItems, ambiguous);
+        findCollisions(targetItems, ambiguous);
+        Map<MatchKey, Item> sourceByKey = index(sourceItems, ambiguous);
+        Map<MatchKey, Item> targetByKey = index(targetItems, ambiguous);
+        Set<MatchKey> keys = new LinkedHashSet<>(sourceByKey.keySet());
         keys.addAll(targetByKey.keySet());
 
         List<ObjectDiff> result = new ArrayList<>();
-        for (String key : keys) {
-            Item source = sourceByKey.get(key);
-            Item target = targetByKey.get(key);
+        for (MatchKey match : keys) {
+            Item source = sourceByKey.get(match);
+            Item target = targetByKey.get(match);
+            String key = match.originalName() == null ? match.normalized() : match.originalName();
             if (source == null) {
                 result.add(new ObjectDiff(objectType, key, DiffStatus.ONLY_TARGET, List.of()));
                 continue;
@@ -69,7 +73,11 @@ public abstract class AbstractSchemaObjectComparator implements SchemaObjectComp
     }
 
     protected static Item item(String key, Map<String, String> attributes) {
-        return new Item(key, attributes);
+        return item(key, attributes, key);
+    }
+
+    protected static Item item(String key, Map<String, String> attributes, String originalName) {
+        return new Item(key, attributes, originalName);
     }
 
     /** 按传入顺序构建属性表，value 为 null 表示该属性不存在。 */
@@ -105,10 +113,18 @@ public abstract class AbstractSchemaObjectComparator implements SchemaObjectComp
         };
     }
 
-    private static Map<String, Item> index(List<Item> items) {
-        Map<String, Item> map = new LinkedHashMap<>();
+    private record MatchKey(String normalized, String originalName) {}
+
+    private static void findCollisions(List<Item> items, Set<String> ambiguous) {
+        Set<String> seen = new LinkedHashSet<>();
+        for (Item item : items) if (!seen.add(item.key())) ambiguous.add(item.key());
+    }
+
+    private static Map<MatchKey, Item> index(List<Item> items, Set<String> ambiguous) {
+        Map<MatchKey, Item> map = new LinkedHashMap<>();
         for (Item item : items) {
-            map.putIfAbsent(item.key(), item);
+            var key = new MatchKey(item.key(), ambiguous.contains(item.key()) ? item.originalName() : null);
+            map.putIfAbsent(key, item);
         }
         return map;
     }

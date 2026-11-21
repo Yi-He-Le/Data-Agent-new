@@ -36,7 +36,7 @@ public class ColumnComparator extends AbstractSchemaObjectComparator {
             if (!context.ignoreColumnOrder()) {
                 attributes.put("POSITION", String.valueOf(column.ordinalPosition()));
             }
-            items.add(item(context.rules().normalizeIdentifier(column.name()), attributes));
+            items.add(item(context.rules().normalizeIdentifier(column.name()), attributes, column.name()));
         }
         return items;
     }

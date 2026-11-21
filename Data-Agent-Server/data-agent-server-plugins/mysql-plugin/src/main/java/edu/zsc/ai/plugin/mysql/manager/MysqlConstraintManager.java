@@ -115,7 +115,7 @@ public final class MysqlConstraintManager implements ConstraintManager {
                             null,
                             List.of(),
                             resultSet.getString("CHECK_CLAUSE"),
-                            true
+                            "YES".equalsIgnoreCase(resultSet.getString("ENFORCED"))
                     ));
                 }
             }
@@ -225,7 +225,7 @@ public final class MysqlConstraintManager implements ConstraintManager {
                     quoteList(constraint.columns()),
                     MysqlIdentifierBuilder.buildFullIdentifier(constraint.referencedSchema(), constraint.referencedTable()),
                     quoteList(constraint.referencedColumns()));
-            case TYPE_CHECK -> "CHECK (" + constraint.checkExpression() + ")";
+            case TYPE_CHECK -> "CHECK (" + constraint.checkExpression() + ")" + (constraint.enabled() ? "" : " NOT ENFORCED");
             default -> throw new IllegalArgumentException("Unsupported MySQL constraint type: " + constraint.type());
         };
         return String.format("ALTER TABLE %s ADD CONSTRAINT %s %s", fullTable, quotedName, body);

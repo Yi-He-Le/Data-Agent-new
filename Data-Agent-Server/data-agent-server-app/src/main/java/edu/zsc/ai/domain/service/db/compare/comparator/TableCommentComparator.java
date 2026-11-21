@@ -1,6 +1,7 @@
 package edu.zsc.ai.domain.service.db.compare.comparator;
 
 import edu.zsc.ai.domain.service.db.compare.diff.DiffObjectType;
+import edu.zsc.ai.domain.service.db.compare.diff.ObjectDiff;
 import edu.zsc.ai.domain.service.db.compare.model.TableSnapshot;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,14 @@ public class TableCommentComparator extends AbstractSchemaObjectComparator {
     public DiffObjectType objectType() {
         return DiffObjectType.COMMENT;
     }
+
+    @Override
+    public List<ObjectDiff> compare(TableSnapshot source, TableSnapshot target, CompareContext context) {
+        return context.ignoreComments() ? List.of() : super.compare(source, target, context);
+    }
+
+    @Override
+    public String metadataError(TableSnapshot table) { return table.commentError(); }
 
     @Override
     protected List<Item> entries(TableSnapshot table, CompareContext context) {

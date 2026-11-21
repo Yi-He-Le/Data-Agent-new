@@ -98,6 +98,16 @@ public class TableServiceImpl implements TableService {
         }
     }
 
+    @Override
+    public Map<String, String> getTableCommentsStrict(DbContext db) {
+        connectionService.openConnection(db);
+        var active = ActiveConnectionRegistry.getOwnedConnection(db);
+        var provider = DefaultPluginManager.getInstance().getTableManagerByPluginId(active.pluginId());
+        try (var borrowed = active.borrowConnection()) {
+            return provider.getTableComments(borrowed.connection(), db.catalog(), db.schema());
+        }
+    }
+
     /**
      * Comments are supplementary metadata: a failed lookup must not hide the
      * table list in the explorer, so degrade to an empty map. Scoped to the

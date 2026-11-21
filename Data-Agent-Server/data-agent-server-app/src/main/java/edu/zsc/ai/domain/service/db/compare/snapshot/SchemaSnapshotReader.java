@@ -40,19 +40,19 @@ public class SchemaSnapshotReader {
 
     public SchemaSnapshot read(DbContext db, CompareOptions options) {
         List<String> tableNames = tableService.getTables(db);
-        Map<String, String> comments = loadComments(db);
+        Comments comments = options.ignoreComments() ? new Comments(Map.of(), null) : loadComments(db);
 
         List<TableSnapshot> tables = new ArrayList<>();
         for (String tableName : tableNames) {
             if (!options.includes(tableName)) {
                 continue;
             }
-            tables.add(readTable(db, tableName, lookupComment(comments, tableName)));
+            tables.add(readTable(db, tableName, lookupComment(comments.values(), tableName), comments.error()));
         }
         return new SchemaSnapshot(db.catalog(), db.schema(), tables);
     }
 
-    private TableSnapshot readTable(DbContext db, String tableName, String comment) {
+    private TableSnapshot readTable(DbContext db, String tableName, String comment, String commentError) {
         List<ColumnSnapshot> columns = List.of();
         List<IndexSnapshot> indexes = List.of();
         List<ConstraintSnapshot> constraints = List.of();
@@ -60,6 +60,7 @@ public class SchemaSnapshotReader {
         String indexError = null;
         String constraintError = null;
         List<String> auxiliaryErrors = new ArrayList<>();
+        if (commentError != null) auxiliaryErrors.add(commentError);
 
         try {
             columns = columnService.listColumns(db, tableName).stream()
@@ -93,16 +94,18 @@ public class SchemaSnapshotReader {
         }
         String auxiliaryError = auxiliaryErrors.isEmpty() ? null : String.join("; ", auxiliaryErrors);
         return new TableSnapshot(tableName, comment, columns, indexes, constraints,
-                columnError, indexError, constraintError, auxiliaryError);
+                columnError, indexError, constraintError, auxiliaryError, commentError);
     }
 
-    private Map<String, String> loadComments(DbContext db) {
+    private record Comments(Map<String, String> values, String error) {}
+
+    private Comments loadComments(DbContext db) {
         try {
-            Map<String, String> comments = tableService.getTableComments(db);
-            return comments == null ? Map.of() : comments;
+            Map<String, String> comments = tableService.getTableCommentsStrict(db);
+            return new Comments(comments == null ? Map.of() : comments, null);
         } catch (Exception e) {
             log.warn("Schema compare: cannot read table comments: {}", message(e));
-            return Map.of();
+            return new Comments(Map.of(), "comments: " + message(e));
         }
     }
 

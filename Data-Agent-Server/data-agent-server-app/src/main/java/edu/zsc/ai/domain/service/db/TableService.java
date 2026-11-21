@@ -32,6 +32,9 @@ public interface TableService {
      */
     Map<String, String> getTableComments(DbContext db);
 
+    /** Comment lookup for comparison: failures must propagate. */
+    Map<String, String> getTableCommentsStrict(DbContext db);
+
     /** Set the table comment; an empty string clears it. */
     void updateTableComment(DbContext db, String tableName, String comment);
 

@@ -128,7 +128,7 @@ public final class MySqlTemplate {
 
     /** Parameters: 1 = TABLE_SCHEMA, 2 = TABLE_NAME. CHECK_CONSTRAINTS exists since MySQL 8.0.16. */
     public static final String SQL_LIST_CHECK_CONSTRAINTS =
-            "SELECT c.CONSTRAINT_NAME, c.TABLE_NAME, ck.CHECK_CLAUSE"
+            "SELECT c.CONSTRAINT_NAME, c.TABLE_NAME, ck.CHECK_CLAUSE, c.ENFORCED"
                     + " FROM information_schema.TABLE_CONSTRAINTS c"
                     + " JOIN information_schema.CHECK_CONSTRAINTS ck"
                     + " ON ck.CONSTRAINT_SCHEMA = c.CONSTRAINT_SCHEMA"

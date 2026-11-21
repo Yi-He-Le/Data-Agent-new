@@ -25,21 +25,10 @@ public class DmDialectRules implements DialectRules {
         return typeName == null ? null : typeName.trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
     }
 
-    /**
-     * null 表示无默认值；字符串默认值返回去掉外层引号的原文，空串返回 ''，
-     * 避免把“无默认值”和“默认值为空串”归一化成同一个值。
-     */
+    /** Without literal/expression metadata, retain quoting and whitespace conservatively. */
     @Override
     public String normalizeDefault(String rawDefault) {
-        if (rawDefault == null) return null;
-        String value = rawDefault.trim();
-        // 空串默认值是合法取值，只有 null 才表示"没有默认值"。
-        if (value.isEmpty()) return "''";
-        if (value.length() >= 2 && value.startsWith("'") && value.endsWith("'")) {
-            String inner = value.substring(1, value.length() - 1);
-            return inner.isEmpty() ? "''" : inner.trim();
-        }
-        return value;
+        return rawDefault;
     }
 
     @Override

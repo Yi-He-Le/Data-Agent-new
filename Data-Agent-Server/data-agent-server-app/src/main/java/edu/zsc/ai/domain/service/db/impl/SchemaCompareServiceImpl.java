@@ -81,14 +81,18 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
         SchemaSnapshot targetSnapshot = snapshotReader.read(target, options);
 
         List<String> warnings = new ArrayList<>();
-        Map<String, TableSnapshot> sourceTables = indexByName(sourceSnapshot.tables(), rules, warnings);
-        Map<String, TableSnapshot> targetTables = indexByName(targetSnapshot.tables(), rules, warnings);
+        Set<String> ambiguous = new LinkedHashSet<>();
+        findNameCollisions(sourceSnapshot.tables(), rules, ambiguous);
+        findNameCollisions(targetSnapshot.tables(), rules, ambiguous);
+        for (String name : ambiguous) warnings.add("表名归一化冲突：" + name + "，该组按原始名称精确比较");
+        Map<TableKey, TableSnapshot> sourceTables = indexByName(sourceSnapshot.tables(), rules, ambiguous);
+        Map<TableKey, TableSnapshot> targetTables = indexByName(targetSnapshot.tables(), rules, ambiguous);
 
-        Set<String> tableKeys = new LinkedHashSet<>(sourceTables.keySet());
+        Set<TableKey> tableKeys = new LinkedHashSet<>(sourceTables.keySet());
         tableKeys.addAll(targetTables.keySet());
 
         List<TableDiff> tableDiffs = new ArrayList<>();
-        for (String key : tableKeys) {
+        for (TableKey key : tableKeys) {
             TableSnapshot sourceTable = sourceTables.get(key);
             TableSnapshot targetTable = targetTables.get(key);
             if (targetTable == null) {
@@ -155,23 +159,22 @@ public class SchemaCompareServiceImpl implements SchemaCompareService {
         return new CompareSummary(onlySource, onlyTarget, different, same, readError, unknown);
     }
 
-    /**
-     * 按归一化名称建索引。归一化后重名（如 foo 与 FOO）时不能静默丢弃，
-     * 追加原名区分后各自参与比较，并记录告警提示用户。
-     */
-    private static Map<String, TableSnapshot> indexByName(List<TableSnapshot> tables, DialectRules rules,
-                                                          List<String> warnings) {
-        Map<String, TableSnapshot> map = new LinkedHashMap<>();
+    private record TableKey(String normalized, String originalName) {}
+
+    private static void findNameCollisions(List<TableSnapshot> tables, DialectRules rules, Set<String> ambiguous) {
+        Set<String> seen = new HashSet<>();
         for (TableSnapshot table : tables) {
-            String key = rules.normalizeIdentifier(table.name());
-            TableSnapshot existing = map.get(key);
-            if (existing == null) {
-                map.put(key, table);
-                continue;
-            }
-            map.put(key + "#" + table.name(), table);
-            warnings.add("表名归一化冲突：" + existing.name() + " 与 " + table.name()
-                    + " 归一化后同名，已分别比较");
+            String name = rules.normalizeIdentifier(table.name());
+            if (!seen.add(name)) ambiguous.add(name);
+        }
+    }
+
+    private static Map<TableKey, TableSnapshot> indexByName(List<TableSnapshot> tables, DialectRules rules,
+                                                          Set<String> ambiguous) {
+        Map<TableKey, TableSnapshot> map = new LinkedHashMap<>();
+        for (TableSnapshot table : tables) {
+            String normalized = rules.normalizeIdentifier(table.name());
+            map.put(new TableKey(normalized, ambiguous.contains(normalized) ? table.name() : null), table);
         }
         return map;
     }
