@@ -41,7 +41,8 @@ public final class DmConstraintManager implements ConstraintManager {
             if (name.isBlank()) {
                 continue;
             }
-            ConstraintBuilder builder = builders.computeIfAbsent(name, ignored -> new ConstraintBuilder(row));
+            ConstraintBuilder builder = builders.computeIfAbsent(name,
+                    ignored -> new ConstraintBuilder(row, effectiveSchema));
             String column = DmObjectQuerySupport.stringValue(row.get("COLUMN_NAME"));
             if (!column.isBlank()) {
                 builder.columns.add(column);
@@ -98,11 +99,13 @@ public final class DmConstraintManager implements ConstraintManager {
         private final List<String> columns = new ArrayList<>();
         private final List<String> referencedColumns = new ArrayList<>();
 
-        private ConstraintBuilder(Map<String, Object> row) {
+        private ConstraintBuilder(Map<String, Object> row, String ownerSchema) {
             name = DmObjectQuerySupport.stringValue(row.get("CONSTRAINT_NAME"));
             tableName = DmObjectQuerySupport.stringValue(row.get("TABLE_NAME"));
             type = DmObjectQuerySupport.stringValue(row.get("CONSTRAINT_TYPE"));
-            referencedSchema = readText(row.get("R_OWNER"));
+            // 引用本模式的外键记为本地引用：比较两个不同模式时不会因模式名不同而误报差异。
+            String referencedOwner = readText(row.get("R_OWNER"));
+            referencedSchema = StringUtils.equalsIgnoreCase(referencedOwner, ownerSchema) ? null : referencedOwner;
             referencedTable = readText(row.get("REF_TABLE_NAME"));
             checkExpression = readText(row.get("SEARCH_CONDITION"));
             enabled = "ENABLED".equalsIgnoreCase(DmObjectQuerySupport.stringValue(row.get("STATUS")));

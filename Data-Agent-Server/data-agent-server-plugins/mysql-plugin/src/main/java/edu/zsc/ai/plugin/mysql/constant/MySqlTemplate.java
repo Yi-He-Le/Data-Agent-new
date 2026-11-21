@@ -112,6 +112,41 @@ public final class MySqlTemplate {
                     + " AND " + ORDINAL_POSITION + " > 0"
                     + " AND " + PARAMETER_NAME + " IS NOT NULL";
 
+    // --- information_schema constraint metadata ---
+    /** Parameters: 1 = TABLE_SCHEMA, 2 = TABLE_NAME. Foreign keys only; columns ordered by ORDINAL_POSITION. */
+    public static final String SQL_LIST_FOREIGN_KEYS =
+            "SELECT k.CONSTRAINT_NAME, k.TABLE_NAME, k.COLUMN_NAME, k.ORDINAL_POSITION,"
+                    + " k.REFERENCED_TABLE_SCHEMA, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME"
+                    + " FROM information_schema.KEY_COLUMN_USAGE k"
+                    + " JOIN information_schema.TABLE_CONSTRAINTS c"
+                    + " ON c.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA"
+                    + " AND c.CONSTRAINT_NAME = k.CONSTRAINT_NAME"
+                    + " AND c.TABLE_NAME = k.TABLE_NAME"
+                    + " WHERE c.CONSTRAINT_TYPE = 'FOREIGN KEY'"
+                    + " AND k.TABLE_SCHEMA = ? AND k.TABLE_NAME = ?"
+                    + " ORDER BY k.CONSTRAINT_NAME, k.ORDINAL_POSITION";
+
+    /** Parameters: 1 = TABLE_SCHEMA, 2 = TABLE_NAME. CHECK_CONSTRAINTS exists since MySQL 8.0.16. */
+    public static final String SQL_LIST_CHECK_CONSTRAINTS =
+            "SELECT c.CONSTRAINT_NAME, c.TABLE_NAME, ck.CHECK_CLAUSE"
+                    + " FROM information_schema.TABLE_CONSTRAINTS c"
+                    + " JOIN information_schema.CHECK_CONSTRAINTS ck"
+                    + " ON ck.CONSTRAINT_SCHEMA = c.CONSTRAINT_SCHEMA"
+                    + " AND ck.CONSTRAINT_NAME = c.CONSTRAINT_NAME"
+                    + " WHERE c.CONSTRAINT_TYPE = 'CHECK'"
+                    + " AND c.TABLE_SCHEMA = ? AND c.TABLE_NAME = ?"
+                    + " ORDER BY c.CONSTRAINT_NAME";
+
+    /** Parameters: 1 = CONSTRAINT_SCHEMA, 2 = CONSTRAINT_NAME. */
+    public static final String SQL_FIND_CONSTRAINT_TABLE =
+            "SELECT TABLE_NAME FROM information_schema.TABLE_CONSTRAINTS"
+                    + " WHERE CONSTRAINT_SCHEMA = ? AND CONSTRAINT_NAME = ? LIMIT 1";
+
+    /** Parameters: 1 = CONSTRAINT_SCHEMA, 2 = TABLE_NAME, 3 = CONSTRAINT_NAME. */
+    public static final String SQL_GET_CONSTRAINT_TYPE =
+            "SELECT CONSTRAINT_TYPE FROM information_schema.TABLE_CONSTRAINTS"
+                    + " WHERE CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?";
+
     // --- Table/View Data Query (with pagination) ---
     /** %1$s = table/view name, %2$s = offset, %3$s = page size */
     public static final String SQL_SELECT_TABLE_DATA =
