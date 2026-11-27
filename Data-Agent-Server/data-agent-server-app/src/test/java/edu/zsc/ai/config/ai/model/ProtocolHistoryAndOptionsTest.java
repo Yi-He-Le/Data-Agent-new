@@ -180,14 +180,28 @@ class ProtocolHistoryAndOptionsTest {
         assertNull(disabled.reasoningEffort());assertEquals(0.3, disabled.temperature());
     }
 
-    @Test void deepSeekReplaysItsOwnReasoningAndDropsForeignOne() {
+    @Test void deepSeekReplaysItsOwnReasoningAcrossModelSwitchesButDropsForeignThinking() {
         var config = deepseek(ThinkingMode.ENABLED, "high", "deepseek-flash");
         var response = ChatResponse.builder().aiMessage(AiMessage.builder().text("ok").thinking("step").build()).build();
         AiMessage captured = ProtocolHistory.capture(response, config).aiMessage();
         assertNotNull(ProtocolStateCodec.read(captured));
         assertSame(captured, ProtocolHistory.forTarget(List.of(captured), config).get(0));
-        AiMessage portable = (AiMessage) ProtocolHistory.forTarget(List.of(captured), deepseek(ThinkingMode.ENABLED, "high", "deepseek-v4-pro")).get(0);
-        assertNull(portable.thinking());assertTrue(portable.attributes().isEmpty());
+        // Switching the DeepSeek model (flash -> v4-pro) must preserve reasoning: it round-trips as
+        // reasoning_content and DeepSeek rejects history without it. Only the access/protocol scope gates replay.
+        AiMessage replayed = (AiMessage) ProtocolHistory.forTarget(List.of(captured),
+                deepseek(ThinkingMode.ENABLED, "high", "deepseek-v4-pro")).get(0);
+        assertEquals("step", replayed.thinking());
+        // Foreign (non-preserved) thinking is still stripped, and a thinking-mode switch still drops reasoning.
+        var foreign = deepseek(ThinkingMode.ENABLED, "high", "deepseek-flash");
+        AiMessage foreignCaptured = ProtocolHistory.capture(ChatResponse.builder()
+                .aiMessage(AiMessage.builder().text("ok").thinking("foreign step").build()).build(), foreign).aiMessage();
+        var anthropic = new ResolvedModelConfig("config", 1, "connection-anthropic", 1, new ModelAccessContext(1, WorkspaceTypeEnum.PERSONAL, 1),
+                "ANTHROPIC", ModelApiStyle.ANTHROPIC_MESSAGES, "fixture-model", "Fixture", URI.create("https://api.anthropic.com/"),
+                "env:FIXTURE_KEY", 1, "anthropic-tools-v1", "anthropic-messages-v1",
+                new ResolvedModelConfig.EffectiveOptions(ThinkingMode.DISABLED, null, null, 4096), 32768, 24000, true, Set.of());
+        assertNull(((AiMessage) ProtocolHistory.forTarget(List.of(foreignCaptured), anthropic).get(0)).thinking());
+        assertNull(((AiMessage) ProtocolHistory.forTarget(List.of(captured),
+                deepseek(ThinkingMode.DISABLED, null, "deepseek-v4-pro")).get(0)).thinking());
     }
 
     private static dev.langchain4j.model.openai.OpenAiChatRequestParameters configured(ResolvedModelConfig config) {

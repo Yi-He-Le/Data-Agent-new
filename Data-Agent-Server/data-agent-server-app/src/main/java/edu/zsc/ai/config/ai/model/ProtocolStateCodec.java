@@ -46,14 +46,15 @@ public final class ProtocolStateCodec {
     }
 
     static boolean matches(JsonNode state, ResolvedModelConfig config) {
-        // Chat Completions reasoning is ordinary assistant content, not a signed provider block.
-        // It survives effort changes and key rotation on the same model/connection.
+        // Preserved-thinking providers (e.g. DeepSeek) treat reasoning as ordinary assistant content
+        // that must round-trip as "reasoning_content". It survives model switches (v4 <-> pro <-> flash)
+        // and key rotation, so only protocol identity and access scope gate replay, never the source model.
         boolean preserved = config.apiStyle() == ModelApiStyle.OPENAI_CHAT_COMPLETIONS
                 && OpenAiChatCompatibility.rules(config).preserveThinking();
         return state.path("apiStyle").asText().equals(config.apiStyle().name())
-                && state.path("connectionId").asText().equals(config.connectionId())
-                && state.path("modelId").asText().equals(config.modelId())
-                && state.path("endpoint").asText().equals(config.endpoint().toString())
+                && (preserved || state.path("connectionId").asText().equals(config.connectionId()))
+                && (preserved || state.path("modelId").asText().equals(config.modelId()))
+                && (preserved || state.path("endpoint").asText().equals(config.endpoint().toString()))
                 && state.path("ownerId").asText().equals(Long.toString(config.access().ownerId()))
                 && state.path("workspaceType").asText().equals(config.access().workspaceType().name())
                 && (preserved || state.path("connectionVersion").asLong(-1) == config.connectionVersion())
