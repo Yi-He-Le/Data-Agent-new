@@ -21,7 +21,6 @@ interface ExplorerTreeProps {
   onViewDdl: (node: ExplorerNode) => void;
   onViewData: (node: ExplorerNode, highlightColumn?: string) => void;
   onTableOrViewDoubleClick: (node: ExplorerNode) => void;
-  onTableComment: (node: ExplorerNode) => void;
   onRename: (node: ExplorerNode) => void;
   onDelete: (node: ExplorerNode, type: ExplorerNodeType) => void;
   onOpenQueryConsole: (node: ExplorerNode) => void;
@@ -34,6 +33,7 @@ interface ExplorerTreeProps {
   onExportTablesWizard: (node: ExplorerNode) => void;
   onImportTablesWizard: (node: ExplorerNode) => void;
   onOpenErDiagram: (node: ExplorerNode) => void;
+  onSchemaCompare: (node: ExplorerNode) => void;
   onCreateGroup: (node: ExplorerNode) => void;
   onCreateRuleGroup: (node: ExplorerNode) => void;
   onRenameGroup: (node: ExplorerNode) => void;
@@ -116,7 +116,6 @@ export const ExplorerTree = forwardRef<ExplorerTreeHandle, ExplorerTreeProps>(fu
   onViewDdl,
   onViewData,
   onTableOrViewDoubleClick,
-  onTableComment,
   onRename,
   onDelete,
   onOpenQueryConsole,
@@ -129,6 +128,7 @@ export const ExplorerTree = forwardRef<ExplorerTreeHandle, ExplorerTreeProps>(fu
   onExportTablesWizard,
   onImportTablesWizard,
   onOpenErDiagram,
+  onSchemaCompare,
   onCreateGroup,
   onCreateRuleGroup,
   onRenameGroup,
@@ -251,7 +251,6 @@ export const ExplorerTree = forwardRef<ExplorerTreeHandle, ExplorerTreeProps>(fu
         onViewDdl={onViewDdl}
         onViewData={onViewData}
         onTableOrViewDoubleClick={onTableOrViewDoubleClick}
-        onTableComment={onTableComment}
         onRename={onRename}
         onDelete={onDelete}
         onOpenQueryConsole={onOpenQueryConsole}
@@ -264,6 +263,7 @@ export const ExplorerTree = forwardRef<ExplorerTreeHandle, ExplorerTreeProps>(fu
         onExportTablesWizard={onExportTablesWizard}
         onImportTablesWizard={onImportTablesWizard}
         onOpenErDiagram={onOpenErDiagram}
+        onSchemaCompare={onSchemaCompare}
         onCreateGroup={onCreateGroup}
         onCreateRuleGroup={onCreateRuleGroup}
         onRenameGroup={onRenameGroup}

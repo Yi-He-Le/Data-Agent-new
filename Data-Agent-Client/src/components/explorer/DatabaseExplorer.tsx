@@ -11,7 +11,6 @@ import { useConnectionActions } from '../../hooks/useConnectionActions';
 import { useDataViewActions } from '../../hooks/useDataViewActions';
 import { useDeleteActions } from '../../hooks/useDeleteActions';
 import { useRenameActions } from '../../hooks/useRenameActions';
-import { useTableCommentActions } from '../../hooks/useTableCommentActions';
 import { I18N_KEYS } from '../../constants/i18nKeys';
 import { DataAttributes } from '../../constants/dataAttributes';
 import { EXPLORER_SQL_OBJECT_CHANGED, ExplorerNodeType, FolderName } from '../../constants/explorer';
@@ -28,6 +27,7 @@ import type { BatchImportParams } from './BatchImportDialog';
 import { ImportDataDialog } from './ImportDataDialog';
 import type { ImportDataParams } from './ImportDataDialog';
 import { SchemaDdlGeneratorDialog } from './SchemaDdlGeneratorDialog';
+import { SchemaCompareDialog } from './SchemaCompareDialog';
 import { RunSqlScriptDialog } from './RunSqlScriptDialog';
 import { GroupNameDialog } from './GroupNameDialog';
 import { RuleGroupDialog } from './RuleGroupDialog';
@@ -115,8 +115,6 @@ export function DatabaseExplorer() {
     setSelectedCreateTableNode,
     renameState,
     setRenameState,
-    commentState,
-    setCommentState,
   } = dialogState;
 
   // Connection actions
@@ -154,13 +152,6 @@ export function DatabaseExplorer() {
     renameState,
     setTreeDataState,
     rebuildTablesFolder,
-  });
-
-  // Table comment actions
-  const { handleTableComment, confirmTableComment } = useTableCommentActions({
-    commentState,
-    setCommentState,
-    setTreeDataState,
   });
 
   const ddlConfig = getDdlConfig();
@@ -280,6 +271,25 @@ export function DatabaseExplorer() {
     if (!target) return;
     setSqlScriptTarget(target);
     setRunSqlScriptOpen(true);
+  };
+
+  // Schema compare dialog (read-only structure diff): right-click a DB/schema node.
+  const [schemaCompareOpen, setSchemaCompareOpen] = useState(false);
+  const [schemaCompareDefaults, setSchemaCompareDefaults] = useState<{
+    connectionId?: number;
+    catalog?: string | null;
+    schema?: string | null;
+  }>({});
+  const handleSchemaCompare = (node: ExplorerNode) => {
+    const conn = node.dbConnection ?? connections.find((c) => String(c.id) === node.connectionId);
+    // DB nodes carry the database name in `name` (no catalog field), schema nodes carry both.
+    const catalog = node.catalog ?? (node.type === ExplorerNodeType.DB ? node.name : conn?.database) ?? '';
+    setSchemaCompareDefaults({
+      connectionId: Number(node.connectionId),
+      catalog: catalog || null,
+      schema: node.schema || null,
+    });
+    setSchemaCompareOpen(true);
   };
 
   // ---- Table groups ----
@@ -441,6 +451,15 @@ export function DatabaseExplorer() {
         }
       };
       collect(treeDataState);
+      // CREATE/DROP DATABASE or SCHEMA changes the connection's direct children.
+      if (detail.objectType === 'DATABASE' || detail.objectType === 'SCHEMA') {
+        const root = nodes.find(
+          (node) => node.type === ExplorerNodeType.ROOT
+            && node.connectionId === String(detail.connectionId)
+        );
+        if (root) void refreshNodeById(root.id);
+        return;
+      }
       const matchingScope = (node: ExplorerNode) =>
         node.connectionId === String(detail.connectionId)
         && (node.catalog ?? '') === (detail.catalog ?? '');
@@ -503,7 +522,6 @@ export function DatabaseExplorer() {
           onViewDdl={handleViewDdl}
           onViewData={handleViewData}
           onTableOrViewDoubleClick={handleTableOrViewDoubleClick}
-          onTableComment={handleTableComment}
           onRename={handleRename}
           onDelete={handleDelete}
           onOpenQueryConsole={handleOpenQueryConsole}
@@ -516,6 +534,7 @@ export function DatabaseExplorer() {
           onExportTablesWizard={handleExportTablesWizard}
           onImportTablesWizard={handleImportTablesWizard}
           onOpenErDiagram={handleOpenErDiagram}
+          onSchemaCompare={handleSchemaCompare}
           onCreateGroup={handleCreateGroup}
           onCreateRuleGroup={handleCreateRuleGroup}
           onRenameGroup={handleRenameGroup}
@@ -557,9 +576,6 @@ export function DatabaseExplorer() {
         renameState={renameState}
         onRenameStateChange={setRenameState}
         onConfirmRename={confirmRename}
-        commentState={commentState}
-        onCommentStateChange={setCommentState}
-        onConfirmTableComment={confirmTableComment}
         createTableDialogOpen={createTableDialogOpen}
         onCreateTableDialogOpenChange={setCreateTableDialogOpen}
         setSelectedCreateTableNode={setSelectedCreateTableNode}
@@ -605,6 +621,15 @@ export function DatabaseExplorer() {
         open={sqlGeneratorOpen}
         onOpenChange={setSqlGeneratorOpen}
         target={sqlScriptTarget}
+      />
+
+      <SchemaCompareDialog
+        open={schemaCompareOpen}
+        onOpenChange={setSchemaCompareOpen}
+        connections={connections}
+        defaultConnectionId={schemaCompareDefaults.connectionId}
+        defaultCatalog={schemaCompareDefaults.catalog}
+        defaultSchema={schemaCompareDefaults.schema}
       />
 
       <RunSqlScriptDialog

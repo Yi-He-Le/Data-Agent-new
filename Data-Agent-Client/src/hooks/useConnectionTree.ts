@@ -343,6 +343,43 @@ export function useConnectionTree() {
     return 'none';
   };
 
+  /**
+   * ROOT 的直接子节点：仅模式型数据库（如 DM）直接挂 schema，其余挂 database。
+   * 首次加载与刷新共用，保证两条路径的节点结构一致。
+   */
+  const loadRootChildren = async (
+    node: ExplorerNode,
+    connId: string,
+    force: boolean,
+  ): Promise<ExplorerNode[]> => {
+    const dbConnection = node.dbConnection;
+    if (!dbConnection) return [];
+    const typeOption = supportedDbTypes.find((opt) => opt.code === dbConnection.dbType);
+    const schemaOnly = (typeOption?.supportSchema ?? false) && !(typeOption?.supportDatabase ?? true);
+    if (schemaOnly) {
+      const schemas = await fetchExplorerSchemas(queryClient, connId, undefined, { force });
+      return schemas.map((schemaName) => ({
+        id: `${node.id}${ExplorerIdPrefix.SCHEMA}${schemaName}`,
+        name: schemaName,
+        type: ExplorerNodeType.SCHEMA,
+        connectionId: connId,
+        dbConnection,
+        catalog: undefined,
+        schema: schemaName,
+        children: [],
+      }));
+    }
+    const dbNames = await fetchExplorerDatabases(queryClient, connId, { force });
+    return dbNames.map((name) => ({
+      id: `${node.id}${ExplorerIdPrefix.DB}${name}`,
+      name,
+      type: ExplorerNodeType.DB,
+      connectionId: connId,
+      dbConnection,
+      children: [],
+    }));
+  };
+
   const loadNodeData = async (node: NodeApi<ExplorerNode>) => {
     if (!node.data.connectionId && node.data.type !== ExplorerNodeType.ROOT) return;
 
@@ -354,33 +391,7 @@ export function useConnectionTree() {
     setNodeLoading(node.id, true);
     try {
       if (node.data.type === ExplorerNodeType.ROOT && node.data.dbConnection) {
-        const typeOption = supportedDbTypes.find((opt) => opt.code === node.data.dbConnection?.dbType);
-        // Schema-only databases (e.g. DM): no database layer, schemas hang directly under the connection.
-        const schemaOnly = (typeOption?.supportSchema ?? false) && !(typeOption?.supportDatabase ?? true);
-        if (schemaOnly) {
-          const schemas = await fetchExplorerSchemas(queryClient, connId, undefined);
-          const childrenNodes: ExplorerNode[] = schemas.map((schemaName) => ({
-            id: `${node.id}${ExplorerIdPrefix.SCHEMA}${schemaName}`,
-            name: schemaName,
-            type: ExplorerNodeType.SCHEMA,
-            connectionId: connId,
-            dbConnection: node.data.dbConnection,
-            catalog: undefined,
-            schema: schemaName,
-            children: [],
-          }));
-          updateNodeChildren(node.id, childrenNodes, String(node.data.dbConnection.id));
-          return;
-        }
-        const dbNames = await fetchExplorerDatabases(queryClient, String(node.data.dbConnection.id));
-        const childrenNodes: ExplorerNode[] = dbNames.map((name) => ({
-          id: `${node.id}${ExplorerIdPrefix.DB}${name}`,
-          name,
-          type: ExplorerNodeType.DB,
-          connectionId: String(node.data.dbConnection!.id),
-          dbConnection: node.data.dbConnection,
-          children: [],
-        }));
+        const childrenNodes = await loadRootChildren(node.data, connId, false);
         updateNodeChildren(node.id, childrenNodes, String(node.data.dbConnection.id));
         return;
       }
@@ -492,7 +503,10 @@ export function useConnectionTree() {
 
     setNodeLoading(nodeId, true);
     try {
-      if (node.type === ExplorerNodeType.DB) {
+      if (node.type === ExplorerNodeType.ROOT) {
+        const childrenNodes = await loadRootChildren(node, connId, true);
+        updateNodeChildren(node.id, childrenNodes, connId);
+      } else if (node.type === ExplorerNodeType.DB) {
         const dbName = node.name;
         const typeOption = supportedDbTypes.find((opt) => opt.code === node.dbConnection?.dbType);
         const supportSchema = typeOption?.supportSchema ?? false;
