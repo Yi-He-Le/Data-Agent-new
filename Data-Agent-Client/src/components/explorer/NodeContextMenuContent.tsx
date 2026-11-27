@@ -27,7 +27,6 @@ interface NodeContextMenuContentProps {
   onSchemaCompare: (node: ExplorerNode) => void;
   onViewDdl: (node: ExplorerNode) => void;
   onViewData: (node: ExplorerNode, highlightColumn?: string) => void;
-  onRename: (node: ExplorerNode) => void;
   onDelete: (node: ExplorerNode, type: ExplorerNodeType) => void;
   onImportData: (node: ExplorerNode) => void;
   onExportData: (node: ExplorerNode) => void;
@@ -55,7 +54,6 @@ export function NodeContextMenuContent({
   onSchemaCompare,
   onViewDdl,
   onViewData,
-  onRename,
   onDelete,
   onImportData,
   onExportData,
@@ -341,17 +339,6 @@ export function NodeContextMenuContent({
             )}
           </ContextMenuSubContent>
         </ContextMenuSub>
-      )}
-
-      {/* 4. Rename - for tables */}
-      {node.type === ExplorerNodeType.TABLE && (
-        <>
-          <ContextMenuItem onSelect={() => onRename(node)}>
-            <Pencil className="w-3.5 h-3.5 mr-2" />
-            {t(I18N_KEYS.EXPLORER.RENAME_TABLE)}
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-        </>
       )}
 
       {/* 5. Delete Operations */}

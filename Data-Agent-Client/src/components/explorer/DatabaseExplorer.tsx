@@ -10,7 +10,6 @@ import { useDialogState } from '../../hooks/useDialogState';
 import { useConnectionActions } from '../../hooks/useConnectionActions';
 import { useDataViewActions } from '../../hooks/useDataViewActions';
 import { useDeleteActions } from '../../hooks/useDeleteActions';
-import { useRenameActions } from '../../hooks/useRenameActions';
 import { I18N_KEYS } from '../../constants/i18nKeys';
 import { DataAttributes } from '../../constants/dataAttributes';
 import { EXPLORER_SQL_OBJECT_CHANGED, ExplorerNodeType, FolderName } from '../../constants/explorer';
@@ -113,8 +112,6 @@ export function DatabaseExplorer() {
     setCreateTableDialogOpen,
     selectedCreateTableNode,
     setSelectedCreateTableNode,
-    renameState,
-    setRenameState,
   } = dialogState;
 
   // Connection actions
@@ -144,14 +141,6 @@ export function DatabaseExplorer() {
     setDeleteState,
     deleteState,
     setTreeDataState,
-  });
-
-  // Rename actions
-  const { handleRename, confirmRename } = useRenameActions({
-    setRenameState,
-    renameState,
-    setTreeDataState,
-    rebuildTablesFolder,
   });
 
   const ddlConfig = getDdlConfig();
@@ -522,7 +511,6 @@ export function DatabaseExplorer() {
           onViewDdl={handleViewDdl}
           onViewData={handleViewData}
           onTableOrViewDoubleClick={handleTableOrViewDoubleClick}
-          onRename={handleRename}
           onDelete={handleDelete}
           onOpenQueryConsole={handleOpenQueryConsole}
           onRunSqlScript={handleRunSqlScript}
@@ -573,9 +561,6 @@ export function DatabaseExplorer() {
         deleteState={deleteState}
         onDeleteStateChange={setDeleteState}
         onConfirmDelete={confirmDelete}
-        renameState={renameState}
-        onRenameStateChange={setRenameState}
-        onConfirmRename={confirmRename}
         createTableDialogOpen={createTableDialogOpen}
         onCreateTableDialogOpenChange={setCreateTableDialogOpen}
         setSelectedCreateTableNode={setSelectedCreateTableNode}

@@ -52,13 +52,6 @@ export function useDialogState() {
   const [createTableDialogOpen, setCreateTableDialogOpen] = useState(false);
   const [selectedCreateTableNode, setSelectedCreateTableNode] = useState<ExplorerNode | null>(null);
 
-  // Rename table dialog
-  const [renameState, setRenameState] = useState<NodeDialogState>({
-    node: null,
-    isOpen: false,
-    isPending: false,
-  });
-
   return {
     // Connection modal
     connectionModalOpen,
@@ -103,9 +96,5 @@ export function useDialogState() {
     setCreateTableDialogOpen,
     selectedCreateTableNode,
     setSelectedCreateTableNode,
-
-    // Rename table
-    renameState,
-    setRenameState,
   };
 }
